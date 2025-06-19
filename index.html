@@ -58,7 +58,6 @@
         filter: invert(90%) hue-rotate(180deg);
       }
     }
-    /* Modal Styles */
     .modal {
       display: none;
       position: fixed;
@@ -118,15 +117,14 @@
     <label>📂 Upload File
       <input type="file" id="file" accept=".geojson,.json,.kml,.gpx" />
     </label>
-    <button id="save">💾 Export to GeoJSON</button>
-    <button id="load">📥 Load from LocalStorage</button>
-    <button id="store">💾 Save to LocalStorage</button>
+    <button id="saveGeoJSON">💾 Export to GeoJSON</button>
+    <button id="saveKML">💾 Export to KML</button>
+    <button id="saveGPX">💾 Export to GPX</button>
     <button id="clear">🧹 Clear</button>
     <button id="reset">🔄 Reset View</button>
     <button id="share">🌐 Share</button>
   </div>
   <div id="map"></div>
-  <!-- Modal for Marker Details -->
   <div class="modal" id="markerModal">
     <div class="modal-content">
       <h2>Add Marker Details</h2>
@@ -229,7 +227,7 @@
       reader.readAsText(file);
     });
 
-    document.getElementById('save').addEventListener('click', () => {
+    document.getElementById('saveGeoJSON').addEventListener('click', () => {
       const data = drawnItems.toGeoJSON();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -241,32 +239,34 @@
       document.body.removeChild(a);
     });
 
-    document.getElementById('store').addEventListener('click', () => {
-      const json = drawnItems.toGeoJSON();
-      localStorage.setItem('features', JSON.stringify(json));
-      alert('Saved to browser storage.');
+    document.getElementById('saveKML').addEventListener('click', () => {
+      const data = drawnItems.toGeoJSON();
+      const kml = geoJSONToKML(data);
+      const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'features.kml';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     });
 
-    document.getElementById('load').addEventListener('click', () => {
-      const data = localStorage.getItem('features');
-      if (data) {
-        const geojson = JSON.parse(data);
-        L.geoJSON(geojson, {
-          onEachFeature: function(feature, layer) {
-            if (feature.properties && feature.properties.title) {
-              const popupContent = `<b>${feature.properties.title}</b><br>${feature.properties.description || 'No description'}`;
-              layer.bindPopup(popupContent);
-            }
-          }
-        }).addTo(drawnItems);
-      } else {
-        alert('No saved data');
-      }
+    document.getElementById('saveGPX').addEventListener('click', () => {
+      const data = drawnItems.toGeoJSON();
+      const gpx = geoJSONToGPX(data);
+      const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'features.gpx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     });
 
     document.getElementById('clear').addEventListener('click', () => {
       drawnItems.clearLayers();
-      localStorage.removeItem('features');
     });
 
     document.getElementById('reset').addEventListener('click', () => {
@@ -283,6 +283,87 @@
 
     function toggleControls() {
       document.getElementById('toolbox').classList.toggle('hidden');
+    }
+
+    function geoJSONToKML(geojson) {
+      let kml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+      kml += '<kml xmlns="http://www.opengis.net/kml/2.2">\n';
+      kml += '<Document>\n';
+      kml += '<name>Map Features</name>\n';
+
+      geojson.features.forEach((feature, index) => {
+        kml += '<Placemark>\n';
+        if (feature.properties && feature.properties.title) {
+          kml += `<name>${feature.properties.title}</name>\n`;
+          kml += `<description>${feature.properties.description || 'No description'}</description>\n`;
+        } else {
+          kml += `<name>Feature ${index + 1}</name>\n`;
+        }
+
+        if (feature.geometry.type === 'Point') {
+          const [lng, lat] = feature.geometry.coordinates;
+          kml += '<Point>\n';
+          kml += `<coordinates>${lng},${lat}</coordinates>\n`;
+          kml += '</Point>\n';
+        } else if (feature.geometry.type === 'LineString') {
+          kml += '<LineString>\n';
+          kml += '<coordinates>\n';
+          feature.geometry.coordinates.forEach(([lng, lat]) => {
+            kml += `${lng},${lat}\n`;
+          });
+          kml += '</coordinates>\n';
+          kml += '</LineString>\n';
+        } else if (feature.geometry.type === 'Polygon') {
+          kml += '<Polygon>\n';
+          kml += '<outerBoundaryIs>\n<LinearRing>\n';
+          kml += '<coordinates>\n';
+          feature.geometry.coordinates[0].forEach(([lng, lat]) => {
+            kml += `${lng},${lat}\n`;
+          });
+          kml += '</coordinates>\n';
+          kml += '</LinearRing>\n</outerBoundaryIs>\n';
+          kml += '</Polygon>\n';
+        }
+
+        kml += '</Placemark>\n';
+      });
+
+      kml += '</Document>\n';
+      kml += '</kml>';
+      return kml;
+    }
+
+    function geoJSONToGPX(geojson) {
+      let gpx = '<?xml version="1.0" encoding="UTF-8"?>\n';
+      gpx += '<gpx version="1.1" creator="Leaflet Map" xmlns="http://www.topografix.com/GPX/1/1">\n';
+      gpx += '<metadata><name>Map Features</name></metadata>\n';
+
+      geojson.features.forEach((feature, index) => {
+        if (feature.geometry.type === 'Point') {
+          const [lng, lat] = feature.geometry.coordinates;
+          gpx += '<wpt ';
+          gpx += `lat="${lat}" lon="${lng}">\n`;
+          if (feature.properties && feature.properties.title) {
+            gpx += `<name>${feature.properties.title}</name>\n`;
+            gpx += `<desc>${feature.properties.description || 'No description'}</desc>\n`;
+          } else {
+            gpx += `<name>Waypoint ${index + 1}</name>\n`;
+          }
+          gpx += '</wpt>\n';
+        } else if (feature.geometry.type === 'LineString') {
+          gpx += '<trk>\n';
+          gpx += `<name>Track ${index + 1}</name>\n`;
+          gpx += '<trkseg>\n';
+          feature.geometry.coordinates.forEach(([lng, lat]) => {
+            gpx += `<trkpt lat="${lat}" lon="${lng}"></trkpt>\n`;
+          });
+          gpx += '</trkseg>\n';
+          gpx += '</trk>\n';
+        }
+      });
+
+      gpx += '</gpx>';
+      return gpx;
     }
   </script>
 </body>
