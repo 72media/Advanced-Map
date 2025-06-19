@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Advanced Map with Save/Load and Marker Details</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    .controls {
+      position: absolute;
+      top: 10px;
+      left: 8.5%;
+      transform: translateX(-50%);
+      background: var(--bg);
+      color: var(--fg);
+      z-index: 1000;
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      max-width: 200px;
+      text-align: center;
+    }
+    .controls input, .controls button {
+      display: block;
+      margin-top: 5px;
+      width: 100%;
+    }
+    .toggle-btn {
+      position: absolute;
+      top: 10px;
+      left: 55px;
+      z-index: 1100;
+      padding: 5px 10px;
+      background: var(--bg);
+      color: var(--fg);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+    .hidden { display: none; }
+    :root {
+      --bg: white;
+      --fg: black;
+    }
+    @media (prefers-color-scheme: white) {
+      :root {
+        --bg: #222;
+        --fg: #fff;
+      }
+      .leaflet-control-layers {
+        background-color: #333;
+        color: white;
+      }
+      .leaflet-container {
+        filter: invert(90%) hue-rotate(180deg);
+      }
+    }
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: var(--bg);
+      color: var(--fg);
+      padding: 20px;
+      border-radius: 10px;
+      width: 300px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    .modal-content h2 {
+      margin-top: 0;
+      font-size: 1.2em;
+    }
+    .modal-content label {
+      display: block;
+      margin: 10px 0 5px;
+    }
+    .modal-content input, .modal-content textarea {
+      width: 100%;
+      padding: 5px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .modal-content button {
+      padding: 8px 15px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    .modal-content button:hover {
+      background: #0056b3;
+    }
+  </style>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="https://unpkg.com/togeojson@0.16.0"></script>
+  <script src="https://unpkg.com/leaflet-gpx/gpx.js"></script>
+</head>
+<body>
+  <button class="toggle-btn" onclick="toggleControls()">☰</button>
+  <div class="controls hidden" id="toolbox">
+    <label>📂 Upload File
+      <input type="file" id="file" accept=".geojson,.json,.kml,.gpx" />
+    </label>
+    <button id="save">💾 Export to GeoJSON</button>
+    <button id="load">📥 Load from LocalStorage</button>
+    <button id="store">💾 Save to LocalStorage</button>
+    <button id="clear">🧹 Clear</button>
+    <button id="reset">🔄 Reset View</button>
+    <button id="share">🌐 Share</button>
+  </div>
+  <div id="map"></div>
+  <!-- Modal for Marker Details -->
+  <div class="modal" id="markerModal">
+    <div class="modal-content">
+      <h2>Add Marker Details</h2>
+      <label for="markerTitle">Title:</label>
+      <input type="text" id="markerTitle" placeholder="Enter title" />
+      <label for="markerDesc">Description:</label>
+      <textarea id="markerDesc" placeholder="Enter description" rows="4"></textarea>
+      <button onclick="saveMarkerDetails()">Save</button>
+      <button onclick="cancelMarkerDetails()">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    const defaultView = [13.736717, 100.523186];
+    const map = L.map('map').setView(defaultView, 6);
+
+    const baseLayers = {
+      "Google Maps": L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 19 }),
+      "Google Hybrid": L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 19 }),
+      "OSM": L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }),
+      "Carto Light": L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { maxZoom: 20 }),
+      "Carto Dark": L.tileLayer('https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { maxZoom: 20 }),
+      "Esri Sat": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 17 })
+    };
+
+    baseLayers["Google Hybrid"].addTo(map);
+    L.control.layers(baseLayers).addTo(map);
+
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+      edit: { featureGroup: drawnItems },
+      draw: { marker: true, polyline: true, polygon: true, circle: true, rectangle: true }
+    });
+    map.addControl(drawControl);
+
+    let currentLayer = null;
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+      const layer = e.layer;
+      if (e.layerType === 'marker') {
+        currentLayer = layer;
+        showMarkerModal();
+      } else {
+        drawnItems.addLayer(layer);
+      }
+    });
+
+    function showMarkerModal() {
+      document.getElementById('markerModal').style.display = 'flex';
+      document.getElementById('markerTitle').value = '';
+      document.getElementById('markerDesc').value = '';
+    }
+
+    function saveMarkerDetails() {
+      if (!currentLayer) return;
+      const title = document.getElementById('markerTitle').value || 'Untitled';
+      const desc = document.getElementById('markerDesc').value || 'No description';
+      const popupContent = `<b>${title}</b><br>${desc}`;
+      currentLayer.bindPopup(popupContent);
+      currentLayer.feature = currentLayer.feature || { type: 'Feature', properties: {} };
+      currentLayer.feature.properties = { title, description: desc };
+      drawnItems.addLayer(currentLayer);
+      document.getElementById('markerModal').style.display = 'none';
+      currentLayer = null;
+    }
+
+    function cancelMarkerDetails() {
+      document.getElementById('markerModal').style.display = 'none';
+      currentLayer = null;
+    }
+
+    document.getElementById('file').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const content = event.target.result;
+        if (file.name.endsWith('.geojson') || file.name.endsWith('.json')) {
+          const geojson = JSON.parse(content);
+          L.geoJSON(geojson, {
+            onEachFeature: function(feature, layer) {
+              if (feature.properties && feature.properties.title) {
+                const popupContent = `<b>${feature.properties.title}</b><br>${feature.properties.description || 'No description'}`;
+                layer.bindPopup(popupContent);
+              }
+            }
+          }).addTo(drawnItems);
+        } else if (file.name.endsWith('.kml')) {
+          const kml = new DOMParser().parseFromString(content, 'text/xml');
+          const geojson = toGeoJSON.kml(kml);
+          L.geoJSON(geojson).addTo(drawnItems);
+        } else if (file.name.endsWith('.gpx')) {
+          new L.GPX(content, { async: true }).on('loaded', e => map.fitBounds(e.target.getBounds())).addTo(drawnItems);
+        } else {
+          alert('Unsupported format');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('save').addEventListener('click', () => {
+      const data = drawnItems.toGeoJSON();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'features.geojson';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+
+    document.getElementById('store').addEventListener('click', () => {
+      const json = drawnItems.toGeoJSON();
+      localStorage.setItem('features', JSON.stringify(json));
+      alert('Saved to browser storage.');
+    });
+
+    document.getElementById('load').addEventListener('click', () => {
+      const data = localStorage.getItem('features');
+      if (data) {
+        const geojson = JSON.parse(data);
+        L.geoJSON(geojson, {
+          onEachFeature: function(feature, layer) {
+            if (feature.properties && feature.properties.title) {
+              const popupContent = `<b>${feature.properties.title}</b><br>${feature.properties.description || 'No description'}`;
+              layer.bindPopup(popupContent);
+            }
+          }
+        }).addTo(drawnItems);
+      } else {
+        alert('No saved data');
+      }
+    });
+
+    document.getElementById('clear').addEventListener('click', () => {
+      drawnItems.clearLayers();
+      localStorage.removeItem('features');
+    });
+
+    document.getElementById('reset').addEventListener('click', () => {
+      map.setView(defaultView, 5);
+    });
+
+    document.getElementById('share').addEventListener('click', () => {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      const hash = `#lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&z=${zoom}`;
+      navigator.clipboard.writeText(location.href.split('#')[0] + hash);
+      alert('Map link copied!');
+    });
+
+    function toggleControls() {
+      document.getElementById('toolbox').classList.toggle('hidden');
+    }
+  </script>
+</body>
+</html>
