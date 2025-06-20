@@ -1,4 +1,5 @@
 คู่มือโปรเจกต์ Advanced Map
+Advanced Map with Save/Load and Marker Details creat by hs8tv
 
 บทนำ
 โปรเจกต์นี้เป็นการพัฒนาแอปพลิเคชันแผนที่ขั้นสูง (Advanced Map) ที่ช่วยให้ผู้ใช้สามารถดูข้อมูลทางภูมิศาสตร์ โดยใช้เทคโนโลยีแผนที่แบบเปิด (OpenStreetMap) และสามารถนำเข้าหรือส่งออกข้อมูลในรูปแบบ GeoJSON และ GPX
