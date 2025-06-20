@@ -1,4 +1,4 @@
-คู่มือโปรเจกต์ Advanced Map
+คู่มือโปรเจกต์ 
 Advanced Map with Save/Load and Marker Details creat by hs8tv
 
 บทนำ
