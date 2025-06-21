@@ -24,6 +24,5 @@ Advanced Map with Save/Load and Marker Details creat by hs8tv
 ตรวจสอบให้แน่ใจว่าเชื่อมต่ออินเทอร์เน็ตเพื่อโหลดข้อมูลแผนที่
 ใช้เบราว์เซอร์สมัยใหม่ เช่น Chrome หรือ Firefox เพื่อประสบการณ์ที่ดีที่สุด
 
-ผู้พัฒนา
-พัฒนาโดย hs8tv 
+ผู้พัฒนา โดย hs8tv 
 
