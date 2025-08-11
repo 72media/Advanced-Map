@@ -14,10 +14,17 @@
   <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
 
+    /* Updated popup content to be more flexible */
     .leaflet-popup-content {
       max-width: 640px !important;
       max-height: 500px;
       overflow-y: auto;
+    }
+    
+    .leaflet-popup-content img {
+      max-width: 100%;
+      height: auto;
+      display: block; /* Prevents unwanted space below the image */
     }
 
     .leaflet-popup-content iframe {
@@ -36,6 +43,8 @@
 
     .marker-content {
       margin-top: 10px;
+      word-wrap: break-word; /* Ensures long text wraps */
+      overflow-wrap: break-word; /* Alternative for better browser support */
     }
 
     .controls {
@@ -197,6 +206,8 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <!-- MarkerCluster JS for grouping markers -->
   <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+  <!-- Marked.js for Markdown support -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 
@@ -234,6 +245,9 @@
       <option value="http://maps.google.com/mapfiles/kml/shapes/earthquake.png">แผ่นดินไหว</option>
       <option value="http://maps.google.com/mapfiles/kml/shapes/volcano.png">ภูเขาไฟ</option>
       <option value="http://maps.google.com/mapfiles/kml/shapes/firedept.png">จุดไฟไหม้</option>
+      <option value="https://maphub.net/media/markers/3/ge/3geqzkryfqwmgmiu/80.png">ทุ่นสึนามิ</option>
+      <option value="https://maphub.net/media/markers/g/fz/gfzwm2obnwflwz1x/80.png">สภาพอากาศ</option>
+      <option value="https://maphub.net/media/markers/k/ce/kceab5neqjwcnxz6/80.png">ยูทูป</option>
     </select>
     <img id="icon-preview" class="icon-preview" src="" alt="Selected Icon" style="display:none;" />
     
@@ -241,8 +255,8 @@
     <input type="text" id="markerTitle" placeholder="ใส่ชื่อ" />
     
     <label for="markerDesc">รายละเอียด:</label>
-    <textarea id="markerDesc" placeholder='ใส่รายละเอียด (ใช้ HTML ได้)' rows="6"></textarea>
-    <p class="html-hint">คุณสามารถแทรก HTML ได้ เช่น iframe จาก Google Drive หรือ YouTube</p>
+    <textarea id="markerDesc" placeholder='ใส่รายละเอียด (รองรับ Markdown และ HTML)' rows="6"></textarea>
+    <p class="html-hint">คุณสามารถใช้ Markdown และแทรกโค้ด HTML ได้ เช่น iframe จาก Google Drive หรือ YouTube. ลิงก์ที่ใส่จะเปิดในแท็บใหม่</p>
     
     <!-- New AI buttons for generating and summarizing descriptions -->
     <div class="ai-buttons">
@@ -392,31 +406,40 @@ function saveMarkerDetails() {
     finalMarker = L.marker(currentLayer.latlng);
   }
 
-  const cleanDesc = DOMPurify.sanitize(desc, {
+  // Convert Markdown text to HTML using marked.js
+  const markdownHtml = marked.parse(desc);
+  
+  const cleanHtml = DOMPurify.sanitize(markdownHtml, {
     ALLOWED_TAGS: ['a', 'p', 'div', 'br', 'iframe', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li'],
     ALLOWED_ATTR: ['href', 'src', 'width', 'height', 'frameborder', 'allowfullscreen', 'target', 'style', 'allow']
   });
   
+  // Create a temporary element to safely modify the links
   const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = cleanDesc;
+  tempDiv.innerHTML = cleanHtml;
+  
+  // Find all links and add target="_blank"
+  const links = tempDiv.querySelectorAll('a');
+  links.forEach(link => {
+      link.setAttribute('target', '_blank');
+  });
+
+  // Check for YouTube iframes and add a full-screen button
   const iframe = tempDiv.querySelector('iframe');
-  let youtubeUrl = null;
+  let fullScreenButton = '';
   if (iframe) {
     const src = iframe.getAttribute('src');
     if (src && src.includes('youtube.com/embed')) {
-      youtubeUrl = src;
+      fullScreenButton = `<br><br><a href="${src}" target="_blank" style="display: inline-block; padding: 8px 15px; background-color: transparent; color: white; text-decoration: none; border-radius: 4px;">ดูแบบเต็มหน้าจอ</a>`;
     }
   }
 
-  let fullScreenButton = '';
-  if (youtubeUrl) {
-    fullScreenButton = `<br><br><a href="${youtubeUrl}" target="_blank" style="display: inline-block; padding: 8px 15px; background-color: transparent; color: white; text-decoration: none; border-radius: 4px;">ดูแบบเต็มหน้าจอ</a>`;
-  }
+  const finalHtmlContent = tempDiv.innerHTML;
   
   const popupContent = `
     <div style="max-width:640px;">
       <b>${title}</b><br>
-      <div class="marker-content">${cleanDesc}${fullScreenButton}</div>
+      <div class="marker-content">${finalHtmlContent}${fullScreenButton}</div>
     </div>
   `;
 
@@ -599,8 +622,17 @@ function setupPopup(layer, properties) {
         }
       });
     } else if (description) {
+      const isHtml = /<[a-z][\s\S]*>/i.test(description);
+      const formattedContent = isHtml ? description : marked.parse(description);
+
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = description;
+      tempDiv.innerHTML = formattedContent;
+      
+      const links = tempDiv.querySelectorAll('a');
+      links.forEach(link => {
+          link.setAttribute('target', '_blank');
+      });
+      
       const iframe = tempDiv.querySelector('iframe');
       let fullScreenButton = '';
       if (iframe) {
@@ -609,7 +641,9 @@ function setupPopup(layer, properties) {
           fullScreenButton = `<br><br><a href="${src}" target="_blank" style="display: inline-block; padding: 8px 15px; background-color: transparent; color: white; text-decoration: none; border-radius: 4px;">ดูแบบเต็มหน้าจอ</a>`;
         }
       }
-      popupContent += `<div class="marker-content">${description}${fullScreenButton}</div>`;
+      
+      const finalHtmlContent = tempDiv.innerHTML;
+      popupContent += `<div class="marker-content">${finalHtmlContent}${fullScreenButton}</div>`;
     }
     
     if (popupContent) {
@@ -909,7 +943,7 @@ document.getElementById('read-aloud-btn').addEventListener('click', async () => 
   }
 });
 
-// Event listener for the new coordinate search button
+// New event listener for the new coordinate search button
 document.getElementById('search-coords-btn').addEventListener('click', () => {
   const coordsInput = document.getElementById('coords-input').value;
   const parts = coordsInput.split(',');
