@@ -4,36 +4,47 @@
   <meta charset="UTF-8" />
   <title>Advanced Map with HTML Support in Marker Details</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Leaflet CSS and Plugins -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
- <style>
-    /* เพิ่ม CSS นี้ในส่วน style */
+  <!-- MarkerCluster CSS for grouping markers -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+
     .leaflet-popup-content {
-      max-width: 400px !important; /* ขยายความกว้างสูงสุดของ popup */
+      max-width: 640px !important;
       max-height: 500px;
       overflow-y: auto;
     }
-    
+
     .leaflet-popup-content iframe {
-      width: 100% !important; /* บังคับให้ iframe กว้างเต็มพื้นที่ */
-      height: 225px; /* กำหนดความสูงคงที่สำหรับอัตราส่วน 16:9 */
+      width: 100% !important;
+      height: auto !important;
+      aspect-ratio: 16 / 9;
       border: none;
-      margin: 10px 0;
     }
     
-    .leaflet-popup-content-wrapper {
-      max-width: 420px !important; /* ขยาย wrapper ให้ใหญ่ขึ้น */
+    /* Style for the video player */
+    .leaflet-popup-content video {
+      width: 100% !important;
+      height: auto !important;
+      background-color: #000;
     }
-  </style>
-  <style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; }
+
+    .marker-content {
+      margin-top: 10px;
+    }
+
     .controls {
       position: absolute;
       top: 10px;
-      left: 8.5%;
+      left: 10.5%;
       transform: translateX(-50%);
-      background: var(--bg);
-      color: var(--fg);
+      background: white;
+      color: black;
       z-index: 1000;
       padding: 10px;
       border-radius: 10px;
@@ -41,42 +52,27 @@
       max-width: 200px;
       text-align: center;
     }
-    .controls input, .controls button {
+    
+    .controls label, .controls input, .controls button {
       display: block;
       margin-top: 5px;
       width: 100%;
     }
+
     .toggle-btn {
       position: absolute;
       top: 10px;
       left: 55px;
       z-index: 1100;
       padding: 5px 10px;
-      background: var(--bg);
-      color: var(--fg);
+      background: white;
+      color: black;
       border: none;
       border-radius: 6px;
       cursor: pointer;
       box-shadow: 0 2px 5px rgba(0,0,0,0.3);
     }
-    .hidden { display: none; }
-    :root {
-      --bg: white;
-      --fg: black;
-    }
-    @media (prefers-color-scheme: white) {
-      :root {
-        --bg: #222;
-        --fg: #fff;
-      }
-      .leaflet-control-layers {
-        background-color: #333;
-        color: white;
-      }
-      .leaflet-container {
-        filter: invert(90%) hue-rotate(180deg);
-      }
-    }
+
     .modal {
       display: none;
       position: fixed;
@@ -89,401 +85,443 @@
       justify-content: center;
       align-items: center;
     }
+
     .modal-content {
-      background: var(--bg);
-      color: var(--fg);
+      background: white;
+      color: black;
       padding: 20px;
       border-radius: 10px;
       width: 400px;
       max-width: 90%;
       box-shadow: 0 2px 10px rgba(0,0,0,0.3);
     }
+
     .modal-content h2 {
       margin-top: 0;
-      font-size: 1.2em;
     }
-    .modal-content label {
-      display: block;
-      margin: 10px 0 5px;
-    }
-    .modal-content input, .modal-content textarea {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-family: inherit;
-    }
+
+    .modal-content input,
     .modal-content textarea {
-      min-height: 100px;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
     }
+
     .modal-content button {
       padding: 8px 15px;
+      margin-right: 10px;
       background: #007bff;
       color: white;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      margin-right: 10px;
     }
-    .modal-content button:hover {
-      background: #0056b3;
-    }
+
     .html-hint {
       font-size: 0.8em;
       color: #666;
-      margin-top: -8px;
       margin-bottom: 10px;
     }
-    .leaflet-popup-content {
-      max-width: 300px;
-      max-height: 300px;
-      overflow-y: auto;
+    .hidden {
+      display: none;
     }
-    .leaflet-popup-content iframe {
-      max-width: 100%;
-      border: none;
+    .full-screen-btn {
+        display: block;
+        margin: 10px auto 0 auto;
+        padding: 8px 15px;
+        background-color: transparent; /* Remove background */
+        color: white; /* White text */
+        font-size: 1.2em; /* Larger font size */
+        text-decoration: none;
+        border-radius: 4px;
+        text-align: center;
+        font-weight: bold;
+    }
+    
+    /* Toast Notification styles */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3000;
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: center;
+    }
+    .toast {
+      background-color: #333;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      margin-top: 10px;
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+    }
+    .toast.show {
+      opacity: 1;
     }
   </style>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-  <script src="https://unpkg.com/togeojson@0.16.0"></script>
-  <script src="https://unpkg.com/leaflet-gpx/gpx.js"></script>
-  <!-- ใช้ DOMPurify เพื่อความปลอดภัยในการแสดง HTML -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.5/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- MarkerCluster JS for grouping markers -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 </head>
 <body>
-  <button class="toggle-btn" onclick="toggleControls()">☰</button>
-  <div class="controls hidden" id="toolbox">
-    <label>📂 Upload File
-      <input type="file" id="file" accept=".geojson,.json,.kml,.gpx" />
-    </label>
-    <button id="saveGeoJSON">💾 Export to GeoJSON</button>
-    <button id="saveKML">💾 Export to KML</button>
-    <button id="saveGPX">💾 Export to GPX</button>
-    <button id="clear">🧹 Clear</button>
-    <button id="reset">🔄 Reset View</button>
-    <button id="share">🌐 Share</button>
+
+<button class="toggle-btn" onclick="toggleControls()">☰</button>
+<div class="controls" id="toolbox">
+  <h3>เครื่องมือ</h3>
+  <label>📂 อัปโหลดไฟล์
+    <input type="file" id="file" accept=".geojson,.json,.kml,.gpx" />
+  </label>
+  <p class="html-hint">รองรับ .geojson, .kml, .gpx</p>
+  <label for="opacity-slider">ความทึบแสงของภาพซ้อน</label>
+  <input type="range" id="opacity-slider" min="0" max="1" step="0.05" value="1" />
+  <button id="saveGeoJSON">💾 Export to GeoJSON</button>
+  <button id="clear">🧹 Clear All</button>
+  <button id="reset">🔄 Reset View</button>
+</div>
+
+<div id="map"></div>
+
+<!-- Modal to add marker details -->
+<div class="modal" id="markerModal">
+  <div class="modal-content">
+    <h2>เพิ่มรายละเอียด Marker</h2>
+    <label for="markerTitle">ชื่อ:</label>
+    <input type="text" id="markerTitle" placeholder="ใส่ชื่อ" />
+    
+    <label for="markerDesc">รายละเอียด:</label>
+    <textarea id="markerDesc" placeholder='ใส่รายละเอียด (ใช้ HTML ได้)' rows="6"></textarea>
+    <p class="html-hint">คุณสามารถแทรก HTML ได้ เช่น iframe จาก Google Drive หรือ YouTube</p>
+    
+    <button onclick="saveMarkerDetails()">บันทึก</button>
+    <button onclick="cancelMarkerDetails()">ยกเลิก</button>
   </div>
-  <div id="map"></div>
-  <div class="modal" id="markerModal">
-    <div class="modal-content">
-      <h2>Add Marker Details</h2>
-      <label for="markerTitle">Title:</label>
-      <input type="text" id="markerTitle" placeholder="Enter title" />
-      
-      <label for="markerDesc">Description:</label>
-      <textarea id="markerDesc" placeholder="Enter description (HTML allowed)" rows="6"></textarea>
-      <p class="html-hint">You can use HTML tags like &lt;a href="..."&gt;Link&lt;/a&gt; or &lt;iframe src="..."&gt;&lt;/iframe&gt;</p>
-      
-      <button onclick="saveMarkerDetails()">Save</button>
-      <button onclick="cancelMarkerDetails()">Cancel</button>
-    </div>
+</div>
+
+<!-- Modal to confirm clearing all layers -->
+<div class="modal" id="clearConfirmModal">
+  <div class="modal-content">
+    <h2>ยืนยันการล้างข้อมูล</h2>
+    <p>คุณแน่ใจหรือไม่ว่าต้องการล้างทุกเลเยอร์และ Marker ทั้งหมด?</p>
+    <button onclick="confirmClear()">ล้างข้อมูล</button>
+    <button onclick="cancelClear()">ยกเลิก</button>
   </div>
+</div>
 
-  <script>
-    const defaultView = [13.736717, 100.523186];
-    const map = L.map('map').setView(defaultView, 6);
+<!-- Container for toast notifications -->
+<div id="toast-container" class="toast-container"></div>
 
-    const baseLayers = {
-      "Google Maps": L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 19 }),
-      "Google Hybrid": L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 19 }),
-      "OSM": L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }),
-      "Carto Light": L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { maxZoom: 20 }),
-      "Carto Dark": L.tileLayer('https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { maxZoom: 20 }),
-      "Esri Sat": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 17 })
-    };
-
-    baseLayers["Google Hybrid"].addTo(map);
-    L.control.layers(baseLayers).addTo(map);
-
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
-
-    const drawControl = new L.Control.Draw({
-      edit: { featureGroup: drawnItems },
-      draw: { marker: true, polyline: true, polygon: true, circle: true, rectangle: true }
-    });
-    map.addControl(drawControl);
-
-    let currentLayer = null;
-
-    map.on(L.Draw.Event.CREATED, function (e) {
-      const layer = e.layer;
-      if (e.layerType === 'marker') {
-        currentLayer = layer;
-        showMarkerModal();
-      } else {
-        drawnItems.addLayer(layer);
-      }
-    });
-
-    function showMarkerModal() {
-      document.getElementById('markerModal').style.display = 'flex';
-      document.getElementById('markerTitle').value = '';
-      document.getElementById('markerDesc').value = '';
-      document.getElementById('markerTitle').focus();
-    }
-
-    function saveMarkerDetails() {
-      if (!currentLayer) return;
-      const title = document.getElementById('markerTitle').value || 'Untitled';
-      const desc = document.getElementById('markerDesc').value || 'No description';
-      
-      // ใช้ DOMPurify เพื่อทำความสะอาด HTML ก่อนแสดงผล
-      const cleanDesc = DOMPurify.sanitize(desc, {
-        ALLOWED_TAGS: ['a', 'p', 'div', 'br', 'iframe', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li'],
-        ALLOWED_ATTR: ['href', 'src', 'width', 'height', 'frameborder', 'allowfullscreen', 'target']
-      });
-      
-      const popupContent = `<b>${title}</b><br><div class="marker-content">${cleanDesc}</div>`;
-      
-      currentLayer.bindPopup(popupContent, {
-        maxWidth: 300,
-        maxHeight: 400
-      });
-      
-      currentLayer.feature = currentLayer.feature || { type: 'Feature', properties: {} };
-      currentLayer.feature.properties = { title, description: desc };
-      drawnItems.addLayer(currentLayer);
-      document.getElementById('markerModal').style.display = 'none';
-      currentLayer = null;
-    }
-
-    function cancelMarkerDetails() {
-      document.getElementById('markerModal').style.display = 'none';
-      if (currentLayer) {
-        map.removeLayer(currentLayer);
-      }
-      currentLayer = null;
-    }
-
-    document.getElementById('file').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const content = event.target.result;
-        if (file.name.endsWith('.geojson') || file.name.endsWith('.json')) {
-          try {
-            const geojson = JSON.parse(content);
-            L.geoJSON(geojson, {
-              onEachFeature: function(feature, layer) {
-                if (feature.properties && feature.properties.title) {
-                  const cleanDesc = DOMPurify.sanitize(feature.properties.description || 'No description', {
-                    ALLOWED_TAGS: ['a', 'p', 'div', 'br', 'iframe', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li'],
-                    ALLOWED_ATTR: ['href', 'src', 'width', 'height', 'frameborder', 'allowfullscreen', 'target']
-                  });
-                  const popupContent = `<b>${feature.properties.title}</b><br><div>${cleanDesc}</div>`;
-                  layer.bindPopup(popupContent, {
-                    maxWidth: 300,
-                    maxHeight: 400
-                  });
-                }
-              }
-            }).addTo(drawnItems);
-          } catch (e) {
-            alert('Error parsing GeoJSON file: ' + e.message);
-          }
-        } else if (file.name.endsWith('.kml')) {
-          const kml = new DOMParser().parseFromString(content, 'text/xml');
-          const geojson = toGeoJSON.kml(kml);
-          L.geoJSON(geojson).addTo(drawnItems);
-        } else if (file.name.endsWith('.gpx')) {
-          new L.GPX(content, { async: true }).on('loaded', e => map.fitBounds(e.target.getBounds())).addTo(drawnItems);
-        } else {
-          alert('Unsupported file format');
-        }
-      };
-      reader.readAsText(file);
-    });
-
-    document.getElementById('saveGeoJSON').addEventListener('click', () => {
-      const data = drawnItems.toGeoJSON();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'map-features.geojson';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    });
-
-    document.getElementById('saveKML').addEventListener('click', () => {
-      const data = drawnItems.toGeoJSON();
-      const kml = geoJSONToKML(data);
-      const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'map-features.kml';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    });
-
-    document.getElementById('saveGPX').addEventListener('click', () => {
-      const data = drawnItems.toGeoJSON();
-      const gpx = geoJSONToGPX(data);
-      const blob = new Blob([gpx], { type: 'application/gpx+xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'map-features.gpx';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    });
-
-    document.getElementById('clear').addEventListener('click', () => {
-      if (confirm('Are you sure you want to clear all features?')) {
-        drawnItems.clearLayers();
-      }
-    });
-
-    document.getElementById('reset').addEventListener('click', () => {
-      map.setView(defaultView, 6);
-    });
-
-    document.getElementById('share').addEventListener('click', () => {
-      const center = map.getCenter();
-      const zoom = map.getZoom();
-      const hash = `#lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&z=${zoom}`;
-      navigator.clipboard.writeText(location.href.split('#')[0] + hash)
-        .then(() => alert('Map link copied to clipboard!'))
-        .catch(() => prompt('Copy this link:', location.href.split('#')[0] + hash));
-    });
-
-    function toggleControls() {
-      document.getElementById('toolbox').classList.toggle('hidden');
-    }
-
-    function geoJSONToKML(geojson) {
-      let kml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-      kml += '<kml xmlns="http://www.opengis.net/kml/2.2">\n';
-      kml += '<Document>\n';
-      kml += '<name>Map Features</name>\n';
-
-      geojson.features.forEach((feature, index) => {
-        kml += '<Placemark>\n';
-        if (feature.properties && feature.properties.title) {
-          kml += `<name>${escapeXml(feature.properties.title)}</name>\n`;
-          kml += `<description>${escapeXml(feature.properties.description || 'No description')}</description>\n`;
-        } else {
-          kml += `<name>Feature ${index + 1}</name>\n`;
-        }
-
-        if (feature.geometry.type === 'Point') {
-          const [lng, lat] = feature.geometry.coordinates;
-          kml += '<Point>\n';
-          kml += `<coordinates>${lng},${lat}</coordinates>\n`;
-          kml += '</Point>\n';
-        } else if (feature.geometry.type === 'LineString') {
-          kml += '<LineString>\n';
-          kml += '<coordinates>\n';
-          feature.geometry.coordinates.forEach(([lng, lat]) => {
-            kml += `${lng},${lat}\n`;
-          });
-          kml += '</coordinates>\n';
-          kml += '</LineString>\n';
-        } else if (feature.geometry.type === 'Polygon') {
-          kml += '<Polygon>\n';
-          kml += '<outerBoundaryIs>\n<LinearRing>\n';
-          kml += '<coordinates>\n';
-          feature.geometry.coordinates[0].forEach(([lng, lat]) => {
-            kml += `${lng},${lat}\n`;
-          });
-          kml += '</coordinates>\n';
-          kml += '</LinearRing>\n</outerBoundaryIs>\n';
-          kml += '</Polygon>\n';
-        }
-
-        kml += '</Placemark>\n';
-      });
-
-      kml += '</Document>\n';
-      kml += '</kml>';
-      return kml;
-    }
-
-    function geoJSONToGPX(geojson) {
-      let gpx = '<?xml version="1.0" encoding="UTF-8"?>\n';
-      gpx += '<gpx version="1.1" creator="Leaflet Map" xmlns="http://www.topografix.com/GPX/1/1">\n';
-      gpx += '<metadata><name>Map Features</name></metadata>\n';
-
-      geojson.features.forEach((feature, index) => {
-        if (feature.geometry.type === 'Point') {
-          const [lng, lat] = feature.geometry.coordinates;
-          gpx += '<wpt ';
-          gpx += `lat="${lat}" lon="${lng}">\n`;
-          if (feature.properties && feature.properties.title) {
-            gpx += `<name>${escapeXml(feature.properties.title)}</name>\n`;
-            gpx += `<desc>${escapeXml(feature.properties.description || 'No description')}</desc>\n`;
-          } else {
-            gpx += `<name>Waypoint ${index + 1}</name>\n`;
-          }
-          gpx += '</wpt>\n';
-        } else if (feature.geometry.type === 'LineString') {
-          gpx += '<trk>\n';
-          gpx += `<name>Track ${index + 1}</name>\n`;
-          gpx += '<trkseg>\n';
-          feature.geometry.coordinates.forEach(([lng, lat]) => {
-            gpx += `<trkpt lat="${lat}" lon="${lng}"></trkpt>\n`;
-          });
-          gpx += '</trkseg>\n';
-          gpx += '</trk>\n';
-        }
-      });
-
-      gpx += '</gpx>';
-      return gpx;
-    }
-
-    function escapeXml(unsafe) {
-      if (!unsafe) return '';
-      return unsafe.replace(/[<>&'"]/g, function (c) {
-        switch (c) {
-          case '<': return '&lt;';
-          case '>': return '&gt;';
-          case '&': return '&amp;';
-          case '\'': return '&apos;';
-          case '"': return '&quot;';
-          default: return c;
-        }
-      });
-    }
-  </script>
 <script>
-    // ในฟังก์ชัน saveMarkerDetails() ให้แก้ไขส่วนสร้าง popup เป็นดังนี้
-    function saveMarkerDetails() {
-      if (!currentLayer) return;
-      const title = document.getElementById('markerTitle').value || 'Untitled';
-      const desc = document.getElementById('markerDesc').value || 'No description';
-      
-      const cleanDesc = DOMPurify.sanitize(desc, {
-        ALLOWED_TAGS: ['a', 'p', 'div', 'br', 'iframe', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li'],
-        ALLOWED_ATTR: ['href', 'src', 'width', 'height', 'frameborder', 'allowfullscreen', 'target', 'style']
+const defaultView = [13.736717, 100.523186];
+const map = L.map('map').setView(defaultView, 6);
+
+// Set up base tile layer
+L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+  maxZoom: 19
+}).addTo(map);
+
+// Use a MarkerClusterGroup for markers to improve performance
+const markers = L.markerClusterGroup();
+map.addLayer(markers);
+
+const drawnItems = new L.FeatureGroup().addTo(map);
+let imageOverlay = null; // Store the image overlay layer
+
+// Initialize the draw control for creating new shapes and markers
+const drawControl = new L.Control.Draw({
+  edit: { featureGroup: drawnItems },
+  draw: { marker: true, polyline: true, polygon: true, circle: true, rectangle: true }
+});
+map.addControl(drawControl);
+
+let currentLayer = null;
+
+// Handle the creation of new layers
+map.on(L.Draw.Event.CREATED, function (e) {
+  const layer = e.layer;
+  if (e.layerType === 'marker') {
+    currentLayer = layer;
+    showMarkerModal();
+  } else {
+    // Add other shapes directly to the drawnItems layer group
+    drawnItems.addLayer(layer);
+  }
+});
+
+// Function to show a toast notification
+function showToast(message, duration = 3000) {
+  const toastContainer = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  
+  // Show toast with a slight delay
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // Hide toast after a duration
+  setTimeout(() => {
+    toast.classList.remove('show');
+    // Remove toast from DOM after it fades out
+    setTimeout(() => toast.remove(), 500); 
+  }, duration);
+}
+
+// Function to show the marker details modal
+function showMarkerModal() {
+  document.getElementById('markerModal').style.display = 'flex';
+  document.getElementById('markerTitle').value = '';
+  document.getElementById('markerDesc').value = '';
+}
+
+// Function to save marker details and add to map
+function saveMarkerDetails() {
+  if (!currentLayer) return;
+  const title = document.getElementById('markerTitle').value || 'ไม่มีชื่อ';
+  const desc = document.getElementById('markerDesc').value || 'ไม่มีรายละเอียด';
+
+  const cleanDesc = DOMPurify.sanitize(desc, {
+    ALLOWED_TAGS: ['a', 'p', 'div', 'br', 'iframe', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li'],
+    ALLOWED_ATTR: ['href', 'src', 'width', 'height', 'frameborder', 'allowfullscreen', 'target', 'style', 'allow']
+  });
+  
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = cleanDesc;
+  const iframe = tempDiv.querySelector('iframe');
+  let youtubeUrl = null;
+  if (iframe) {
+    const src = iframe.getAttribute('src');
+    if (src && src.includes('youtube.com/embed')) {
+      youtubeUrl = src;
+    }
+  }
+
+  let fullScreenButton = '';
+  if (youtubeUrl) {
+    fullScreenButton = `<br><br><a href="${youtubeUrl}" target="_blank" style="display: inline-block; padding: 8px 15px; background-color: transparent; color: white; text-decoration: none; border-radius: 4px;">ดูแบบเต็มหน้าจอ</a>`;
+  }
+  
+  const popupContent = `
+    <div style="max-width:640px;">
+      <b>${title}</b><br>
+      <div class="marker-content">${cleanDesc}${fullScreenButton}</div>
+    </div>
+  `;
+
+  currentLayer.bindPopup(popupContent, {
+    maxWidth: 660,
+    minWidth: 320
+  });
+
+  markers.addLayer(currentLayer); // Add marker to the cluster group
+  document.getElementById('markerModal').style.display = 'none';
+  currentLayer = null;
+}
+
+// Function to cancel marker creation
+function cancelMarkerDetails() {
+  document.getElementById('markerModal').style.display = 'none';
+  if (currentLayer) {
+    map.removeLayer(currentLayer);
+  }
+  currentLayer = null;
+}
+
+// Function to toggle the visibility of the control panel
+function toggleControls() {
+  document.getElementById('toolbox').classList.toggle('hidden');
+}
+
+// Show clear confirmation modal instead of using confirm()
+document.getElementById('clear').addEventListener('click', () => {
+  document.getElementById('clearConfirmModal').style.display = 'flex';
+});
+
+// Function to handle the "Clear" button in the confirmation modal
+function confirmClear() {
+  drawnItems.clearLayers();
+  markers.clearLayers();
+  if (imageOverlay) {
+    map.removeLayer(imageOverlay);
+    imageOverlay = null;
+  }
+  document.getElementById('clearConfirmModal').style.display = 'none';
+  showToast('ล้างข้อมูลทั้งหมดแล้ว');
+}
+
+// Function to handle the "Cancel" button in the confirmation modal
+function cancelClear() {
+  document.getElementById('clearConfirmModal').style.display = 'none';
+}
+
+// Reset map view to the default location and zoom level
+document.getElementById('reset').addEventListener('click', () => {
+  map.setView(defaultView, 6);
+  showToast('รีเซ็ตมุมมองแผนที่แล้ว');
+});
+
+// New code for file upload
+document.getElementById('file').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) {
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function (event) {
+    const content = event.target.result;
+    const extension = file.name.split('.').pop().toLowerCase();
+
+    // Check for KML files with a GroundOverlay
+    if (extension === 'kml' && content.includes('<GroundOverlay>')) {
+      try {
+        const parser = new DOMParser();
+        const kmlDoc = parser.parseFromString(content, 'text/xml');
+        const groundOverlays = kmlDoc.querySelectorAll('GroundOverlay');
+
+        groundOverlays.forEach(overlay => {
+          const latLonBox = overlay.querySelector('LatLonBox');
+          const href = overlay.querySelector('Icon href');
+          
+          if (latLonBox && href) {
+            const north = parseFloat(latLonBox.querySelector('north').textContent);
+            const south = parseFloat(latLonBox.querySelector('south').textContent);
+            const east = parseFloat(latLonBox.querySelector('east').textContent);
+            const west = parseFloat(latLonBox.querySelector('west').textContent);
+            const imageUrl = href.textContent;
+            
+            const bounds = [[south, west], [north, east]];
+            
+            if (imageOverlay) {
+              map.removeLayer(imageOverlay);
+            }
+            
+            imageOverlay = L.imageOverlay(imageUrl, bounds, { opacity: parseFloat(document.getElementById('opacity-slider').value) }).addTo(map);
+            map.fitBounds(bounds);
+            showToast('แสดงภาพซ้อนจากไฟล์ KML แล้ว');
+          }
+        });
+      } catch (error) {
+        showToast(`Error parsing KML GroundOverlay file: ${error.message}`, 5000);
+        return;
+      }
+    }
+    
+    // Use omnivore for all other KML features, GeoJSON, and GPX
+    let layer;
+    try {
+      if (extension === 'geojson' || extension === 'json') {
+        layer = L.geoJSON(JSON.parse(content));
+      } else if (extension === 'kml') {
+        layer = omnivore.kml.parse(content);
+      } else if (extension === 'gpx') {
+        layer = omnivore.gpx.parse(content);
+      }
+    } catch (error) {
+      showToast(`Error parsing file: ${error.message}`, 5000);
+      return;
+    }
+    
+    if (layer) {
+      layer.eachLayer(function(l) {
+        if (l instanceof L.Marker) {
+          markers.addLayer(l); // Add markers to the cluster group
+          setupPopup(l, l.feature.properties);
+        } else {
+          drawnItems.addLayer(l); // Add other shapes to the drawn items group
+          setupPopup(l, l.feature.properties);
+        }
       });
       
-      const popupContent = `
-        <div style="max-width:400px;">
-          <b>${title}</b>
-          <div class="marker-content">${cleanDesc}</div>
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds);
+      } else {
+        showToast('ไฟล์ที่นำเข้าไม่มีขอบเขตทางภูมิศาสตร์ที่ถูกต้อง', 5000);
+      }
+      showToast('อัปโหลดไฟล์เสร็จสมบูรณ์แล้ว');
+    } else {
+      showToast('ไฟล์ไม่รองรับหรือไม่ถูกต้อง!', 5000);
+    }
+  };
+
+  reader.readAsText(file);
+});
+
+// Function to set up the popup for a given layer
+function setupPopup(layer, properties) {
+  if (properties) {
+    let popupContent = "";
+    const description = properties.description || '';
+    const m3u8UrlMatch = description.match(/(https?:\/\/[^\s]+\.m3u8)/);
+
+    if (properties.name) {
+      popupContent += `<b>${properties.name}</b><br>`;
+    }
+
+    if (m3u8UrlMatch) {
+      const m3u8Url = m3u8UrlMatch[0];
+      popupContent += `
+        <div class="marker-content">
+          <video id="hls-video-${L.stamp(layer)}" class="hls-video-player" controls muted></video>
+          <a href="${m3u8Url}" target="_blank" class="full-screen-btn">ดูเต็มจอ</a>
         </div>
       `;
-      
-      currentLayer.bindPopup(popupContent, {
-        maxWidth: 400, // ขยายความกว้างสูงสุดของ popup
-        minWidth: 300  // กำหนดความกว้างขั้นต่ำ
+      layer.on('popupopen', function() {
+        const video = document.getElementById(`hls-video-${L.stamp(layer)}`);
+        if (Hls.isSupported() && video) {
+          var hls = new Hls();
+          hls.loadSource(m3u8Url);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            video.play();
+          });
+        } else if (video && video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = m3u8Url;
+          video.addEventListener('loadedmetadata', function() {
+            video.play();
+          });
+        }
       });
-      
-      currentLayer.feature = currentLayer.feature || { type: 'Feature', properties: {} };
-      currentLayer.feature.properties = { title, description: desc };
-      drawnItems.addLayer(currentLayer);
-      document.getElementById('markerModal').style.display = 'none';
-      currentLayer = null;
+    } else if (description) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = description;
+      const iframe = tempDiv.querySelector('iframe');
+      let fullScreenButton = '';
+      if (iframe) {
+        const src = iframe.getAttribute('src');
+        if (src && src.includes('youtube.com/embed')) {
+          fullScreenButton = `<br><br><a href="${src}" target="_blank" style="display: inline-block; padding: 8px 15px; background-color: transparent; color: white; text-decoration: none; border-radius: 4px;">ดูแบบเต็มหน้าจอ</a>`;
+        }
+      }
+      popupContent += `<div class="marker-content">${description}${fullScreenButton}</div>`;
     }
-  </script>
+    
+    if (popupContent) {
+      layer.bindPopup(popupContent, {
+        maxWidth: 660,
+        minWidth: 320
+      });
+    }
+  }
+}
+
+// Event listener for the opacity slider
+document.getElementById('opacity-slider').addEventListener('input', (e) => {
+  const opacity = e.target.value;
+  if (imageOverlay) {
+    imageOverlay.setOpacity(opacity);
+  }
+});
+</script>
+
 </body>
 </html>
