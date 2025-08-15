@@ -245,6 +245,8 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
   <!-- Marked.js for Markdown support -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- JSZip for KMZ file extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
@@ -252,9 +254,9 @@
 <div class="controls" id="toolbox">
   <h3>เครื่องมือ</h3>
   <label>📂 อัปโหลดไฟล์
-    <input type="file" id="file" accept=".geojson,.json,.kml,.gpx" />
+    <input type="file" id="file" accept=".geojson,.json,.kml,.gpx,.kmz" />
   </label>
-  <p class="html-hint">รองรับ .geojson, .kml, .gpx</p>
+  <p class="html-hint">รองรับ .geojson, .kml, .gpx, .kmz</p>
   
   <!-- Uploaded files list -->
   <div class="uploaded-files-container" id="uploadedFilesContainer">
@@ -604,6 +606,136 @@ function removeFile(index) {
   }
 }
 
+// Function to process KMZ file
+async function processKMZ(file) {
+  try {
+    showToast('กำลังประมวลผลไฟล์ KMZ...', 5000);
+    
+    // Read the KMZ file as array buffer
+    const arrayBuffer = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(new Error('Failed to read KMZ file'));
+      reader.readAsArrayBuffer(file);
+    });
+    
+    // Load the KMZ file with JSZip
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    
+    // Find the main KML file (usually doc.kml)
+    let kmlFile = null;
+    for (const [filename, file] of Object.entries(zip.files)) {
+      if (filename.toLowerCase().endsWith('.kml')) {
+        kmlFile = file;
+        break;
+      }
+    }
+    
+    if (!kmlFile) {
+      throw new Error('ไม่พบไฟล์ KML ในไฟล์ KMZ');
+    }
+    
+    // Read the KML content
+    const kmlContent = await kmlFile.async('text');
+    
+    // Process the KML content
+    const parser = new DOMParser();
+    const kmlDoc = parser.parseFromString(kmlContent, 'text/xml');
+    
+    // Check for GroundOverlay in KMZ
+    const groundOverlays = kmlDoc.querySelectorAll('GroundOverlay');
+    if (groundOverlays.length > 0) {
+      // Process GroundOverlays
+      for (const overlay of groundOverlays) {
+        const latLonBox = overlay.querySelector('LatLonBox');
+        const href = overlay.querySelector('Icon href');
+        
+        if (latLonBox && href) {
+          const north = parseFloat(latLonBox.querySelector('north').textContent);
+          const south = parseFloat(latLonBox.querySelector('south').textContent);
+          const east = parseFloat(latLonBox.querySelector('east').textContent);
+          const west = parseFloat(latLonBox.querySelector('west').textContent);
+          const imagePath = href.textContent;
+          
+          // Try to find the image in the KMZ file
+          let imageBlob = null;
+          for (const [filename, file] of Object.entries(zip.files)) {
+            if (filename.includes(imagePath)) {
+              imageBlob = await file.async('blob');
+              break;
+            }
+          }
+          
+          if (!imageBlob) {
+            showToast(`ไม่พบไฟล์ภาพ ${imagePath} ใน KMZ`, 5000);
+            continue;
+          }
+          
+          const imageUrl = URL.createObjectURL(imageBlob);
+          const bounds = [[south, west], [north, east]];
+          
+          if (imageOverlay) {
+            map.removeLayer(imageOverlay);
+          }
+          
+          imageOverlay = L.imageOverlay(imageUrl, bounds, { 
+            opacity: parseFloat(document.getElementById('opacity-slider').value) 
+          }).addTo(map);
+          
+          map.fitBounds(bounds);
+          
+          // Add to uploaded files list
+          uploadedFiles.push({
+            name: file.name,
+            type: 'kmz',
+            layer: imageOverlay
+          });
+          updateFileList();
+          
+          showToast('แสดงภาพซ้อนจากไฟล์ KMZ แล้ว');
+        }
+      }
+    } else {
+      // Process as regular KML (markers, paths, etc.)
+      const layer = omnivore.kml.parse(kmlContent);
+      
+      if (layer) {
+        const fileInfo = {
+          name: file.name,
+          type: 'kmz',
+          layer: layer
+        };
+        
+        uploadedFiles.push(fileInfo);
+        updateFileList();
+        
+        layer.eachLayer(function(l) {
+          if (l instanceof L.Marker) {
+            markers.addLayer(l); // Add markers to the cluster group
+            setupPopup(l, l.feature ? l.feature.properties : null);
+          } else {
+            drawnItems.addLayer(l); // Add other shapes to the drawn items group
+            setupPopup(l, l.feature ? l.feature.properties : null);
+          }
+        });
+        
+        const bounds = layer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds);
+        } else {
+          showToast('ไฟล์ KMZ ที่นำเข้าไม่มีขอบเขตทางภูมิศาสตร์ที่ถูกต้อง', 5000);
+        }
+        showToast('อัปโหลดไฟล์ KMZ เสร็จสมบูรณ์แล้ว');
+      } else {
+        showToast('ไม่สามารถประมวลผลไฟล์ KMZ ได้', 5000);
+      }
+    }
+  } catch (error) {
+    console.error('Error processing KMZ file:', error);
+    showToast(`ข้อผิดพลาดในการประมวลผล KMZ: ${error.message}`, 5000);
+  }
+}
+
 // New code for file upload
 document.getElementById('file').addEventListener('change', function (e) {
   const file = e.target.files[0];
@@ -611,10 +743,18 @@ document.getElementById('file').addEventListener('change', function (e) {
     return;
   }
 
+  const extension = file.name.split('.').pop().toLowerCase();
+  
+  // Handle KMZ files separately
+  if (extension === 'kmz') {
+    processKMZ(file);
+    e.target.value = ''; // Reset file input
+    return;
+  }
+
   const reader = new FileReader();
   reader.onload = function (event) {
     const content = event.target.result;
-    const extension = file.name.split('.').pop().toLowerCase();
 
     // Check for KML files with a GroundOverlay
     if (extension === 'kml' && content.includes('<GroundOverlay>')) {
