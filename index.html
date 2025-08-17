@@ -182,12 +182,6 @@
       opacity: 1;
     }
 
-    /* CSS for the tilt effect */
-    #map.tilted {
-      transform: perspective(1000px) rotateX(45deg);
-      transition: transform 0.5s ease;
-    }
-
     /* Styles for uploaded files list */
     .uploaded-files-container {
       margin-top: 10px;
@@ -272,7 +266,6 @@
   <hr>
   <label for="opacity-slider">ความทึบแสงของภาพซ้อน</label>
   <input type="range" id="opacity-slider" min="0" max="1" step="0.05" value="1" />
-  <button id="toggle-tilt-btn">เปิด/ปิดมุมมองเอียง</button>
   <button id="saveGeoJSON">💾 Export to GeoJSON</button>
   <button id="clear">🧹 Clear All</button>
   <button id="reset">🔄 Reset View</button>
@@ -897,12 +890,6 @@ document.getElementById('opacity-slider').addEventListener('input', (e) => {
   });
 });
 
-// New event listener for the tilt button
-document.getElementById('toggle-tilt-btn').addEventListener('click', () => {
-  const mapElement = document.getElementById('map');
-  mapElement.classList.toggle('tilted');
-});
-
 // Event listener to show a preview of the selected icon
 document.getElementById('icon-select').addEventListener('change', (e) => {
     const iconUrl = e.target.value;
@@ -991,6 +978,106 @@ function handleSearchResult(latlng, displayText) {
 
   showToast(`พบ: ${displayText}`, 3000);
 }
+
+// Function to export all features to GeoJSON
+document.getElementById('saveGeoJSON').addEventListener('click', function() {
+  // Collect all features from markers and drawn items
+  const features = [];
+  
+  // Add markers from marker cluster group
+  markers.eachLayer(function(layer) {
+    if (layer instanceof L.Marker) {
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [layer.getLatLng().lng, layer.getLatLng().lat]
+        },
+        properties: {
+          title: layer.getPopup() ? layer.getPopup().getContent().match(/<b>(.*?)<\/b>/)?.[1] || '' : '',
+          description: layer.getPopup() ? layer.getPopup().getContent() : ''
+        }
+      });
+    }
+  });
+  
+  // Add drawn items
+  drawnItems.eachLayer(function(layer) {
+    if (layer instanceof L.Polygon) {
+      const latlngs = layer.getLatLngs();
+      const coordinates = latlngs[0].map(latlng => [latlng.lng, latlng.lat]);
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [coordinates]
+        },
+        properties: {}
+      });
+    } else if (layer instanceof L.Polyline) {
+      const coordinates = layer.getLatLngs().map(latlng => [latlng.lng, latlng.lat]);
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: coordinates
+        },
+        properties: {}
+      });
+    } else if (layer instanceof L.Circle) {
+      const center = layer.getLatLng();
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [center.lng, center.lat]
+        },
+        properties: {
+          radius: layer.getRadius()
+        }
+      });
+    } else if (layer instanceof L.Rectangle) {
+      const bounds = layer.getBounds();
+      const coordinates = [
+        [bounds.getSouthWest().lng, bounds.getSouthWest().lat],
+        [bounds.getSouthWest().lng, bounds.getNorthEast().lat],
+        [bounds.getNorthEast().lng, bounds.getNorthEast().lat],
+        [bounds.getNorthEast().lng, bounds.getSouthWest().lat],
+        [bounds.getSouthWest().lng, bounds.getSouthWest().lat]
+      ];
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [coordinates]
+        },
+        properties: {}
+      });
+    }
+  });
+  
+  // Create GeoJSON FeatureCollection
+  const featureCollection = {
+    type: 'FeatureCollection',
+    features: features
+  };
+  
+  // Convert to JSON string
+  const geoJsonStr = JSON.stringify(featureCollection, null, 2);
+  
+  // Create a download link
+  const blob = new Blob([geoJsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'map_data.geojson';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  showToast('บันทึกไฟล์ GeoJSON แล้ว');
+});
 
 // Initialize the uploaded files container as hidden
 document.getElementById('uploadedFilesContainer').style.display = 'none';
